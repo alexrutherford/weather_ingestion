@@ -28,7 +28,8 @@ logging.basicConfig(level=logging.INFO,
 #######################
 ## Read in data from files
 files=glob.glob('../data/weather_data/2016_*json')
-#files=glob.glob('../data/weather_data/2016_2_19_19*json')
+files=glob.glob('../data/weather_data/2016_2_1[456789]_*json')
+files+=glob.glob('../data/weather_data/2016_2_20_*json')
 logging.info('Found %d files to process' % len(files))
 
 files=[f for f in files if not re.search(r'_processed.json',f)]
@@ -55,12 +56,14 @@ dfStation=dfStation.set_value(brazilIndices,'inBrazil',True)
 
 res=utils.putDfInMongo(dfStation,stationCollection)
 print 'Imported %d weather stations' % res
-print '%f weather stations in Brazil' % sum(dfStation['inBrazil'])
+print '%d weather stations in Brazil' % dfStation[dfStation['inBrazil']==True].shape[0]
 
 ############################
 ## Import measurements
-del dfAll['lat']
-del dfAll['long']
+del dfAll
+
+del dfUnique['lat']
+del dfUnique['long']
 # Don't need these to be stored for each measurements
 
 res=utils.putDfInMongo(dfUnique,db.clean)
@@ -85,10 +88,15 @@ nGroups=0
 
 for group in groups:
     resampledGroup=group[1].resample(freq,how='mean',label='left')
+    resampledGroup=resampledGroup.dropna(how='any')
+    # If any values are null after resampling (if measurements dropped out)
+    # remove rows
     resampledGroup['sensorTime']=resampledGroup.index
     resampledGroup['count']=group[1].resample(freq,how='count',label='left')['id']
     # Store how manyindividual measurements went into downsample
-    res=utils.putDfInMongo(resampledGroup,db.cleanDaily)
+    print group[0],
+    res=utils.putDfInMongo(resampledGroup,db.cleanDaily,bulk=True)
+    print res
     assert res==resampledGroup.shape[0], 'Error importing station %d: %d (%d,%d)' % (group[0],len(res.inserted_ids),resampledGroup.shape[0],resampledGroup.shape[1])
 
     nGroups+=1
