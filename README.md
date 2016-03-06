@@ -13,7 +13,10 @@ Python scripts to ingest Open Weather Map data into MongoDB
 
 - ~~Ingest incrementally, searching for duplicates with each insert~~   
 - ~~Create separate collection with coords, names and IDs of towers on first ingest~~  
-- Add in time zones of towers ([reverse geo-coding?](https://developers.google.com/maps/documentation/geocoding/intro#ReverseGeocoding) or [time-zone API](https://developers.google.com/maps/documentation/timezone/intro)) 
+- ~~Add in time zones of towers ([reverse geo-coding?](https://developers.google.com/maps/documentation/geocoding/intro#ReverseGeocoding) or [time-zone API](https://developers.google.com/maps/documentation/timezone/intro))~~   
 - ~~Move/rename files after processing~~
-- When ingesting incrementally, update downsampled values in ``cleanDaily`` by understanding which time periods are updated   
+- ~~When ingesting incrementally, update downsampled values in ``cleanDaily`` by understanding which time periods are updated~~   
 - ~~Add a column to ``cleanDaily`` that shows how many measurements average is based upon? i.e. ``df.n=df.resample('12h',how='count')``~~
+- When ingesting incrementally and updating overlapping values check
+    - Overlapping values only overlap with one last aggregated time period
+    - Make sure duplicate measurements are notbeing added

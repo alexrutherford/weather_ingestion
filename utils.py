@@ -3,15 +3,68 @@ import numpy as np
 import logging,traceback,json
 from dateutil import parser
 import pandas as pd
-import os,re
+import os,re,collections
 import pymongo
 
 earthRadius=6371.0
 # KMs
 logging.basicConfig(level=logging.INFO,
                     filename='log.log', # log to this file
-                    format='%(asctime)s %(message)s '+__name__) 
-                    # include timestamp and function name
+                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s') 
+
+
+############
+def updateDailyMeasurement(cleanDailyCollection,overlap,lastDBMeasurement):
+############
+    '''If new measurements overlap with aggregatedmeasurements in DB
+    add overlaps together and weight according to number of measurements
+    '''
+
+    print 'Update',lastDBMeasurement
+
+    print 'With',overlap
+
+    print 'Weight %d : %d',lastDBMeasurement['count'],overlap.shape[0]
+
+    oldWeight=lastDBMeasurement['count']
+    newWeight=overlap.shape[0]
+
+    newDBMeasurement=lastDBMeasurement
+
+    for k in ['temperature','pressure','humidity']:
+        newDBMeasurement[k]=(oldWeight*lastDBMeasurement[k]+overlap[k].sum())/float(oldWeight+newWeight)
+
+    newDBMeasurement['count']+=newWeight
+
+    print 'Merged to',newDBMeasurement
+
+    res=cleanDailyCollection.find_one_and_update({'id':newDBMeasurement['id'],'sensorTime':lastDBMeasurement['sensorTime']}\
+            ,{'$set':{'count':newDBMeasurement,'temperature':newDBMeasurement['temperature'],'humidity':newDBMeasurement['humidity'],\
+            'pressure':newDBMeasurement['pressure']}},return_document=pymongo.ReturnDocument.AFTER)
+    
+    print 'Updated to',res
+
+############
+def getStationOffsets(collection):
+############
+# db.stations.find({'offset':{$exists:true}},{'_id':0,'id':1,'offset':1,'country':1})
+
+    cur=collection.find({'offset':{'$exists':True}},{'_id':0,'id':1,'offset':1})
+    
+    offsetDict=collections.defaultdict(int)
+    
+    nCount=0
+
+    for l in cur:
+	offsetDict[l['id']]=int(l['offset'])
+        nCount+=1
+
+    logging.info('Got %d station time zone offsets' % nCount)
+    if nCount==0:
+        logging.critical('Found zero station offsets. Run timezone script?')
+
+    return offsetDict
+
 ############
 def unRenameFile(f):
 ############
@@ -33,6 +86,15 @@ def renameFile(f):
     newPath=re.sub('.json','_processed.json',f)
     os.rename(f,newPath)
 
+############
+def getLastDailyMeasurement(cleanDailyCollection,station):
+############
+#    cur=db.cleanDaily.findOne({},)
+   cur=cleanDailyCollection.find({'id':station}).sort('sensorTime',-1).limit(1) 
+   if cur.count()==0:
+       print 'Station missing'
+   else:
+       return cur.next()
 ############
 def getMeasurementsInRange(collection,start,end,tower=None):
 ############
@@ -96,11 +158,12 @@ def putDfInMongo(df,collection,bulk=True):
         return success
 
 ############
-def jsonGenerator(files,verbose=False):
+def jsonGenerator(files,verbose=False,offsets=None):
 ############
     '''
     Generator that parses list of json files and returns 
-    data frame of each.
+    data frame of each. Takes optional dictionary mapping
+    station IDs to time zone offsets
     '''
     for f in files:
 	
@@ -115,6 +178,9 @@ def jsonGenerator(files,verbose=False):
             	sensorTimes=map(lambda x:pd.datetime.fromtimestamp(x['dt']),d['list'])
             	lats=map(lambda x:float(x['coord']['lat']),d['list'])
             	longs=map(lambda x:float(x['coord']['lon']),d['list'])
+
+                if offsets:
+                    sensorTimes=[t+pd.DateOffset(seconds=offsets[i]) for t,i in zip(sensorTimes,ids)]
 
             	assert len(temperature)==len(ids)==len(pressure)==len(humidity)==len(lats)==len(longs),\
 			'Data unequal (%d,%d,%d,%d,%d)' % (len(temperature),len(ids),len(pressure),len(humidity),len(lats),len(longs))

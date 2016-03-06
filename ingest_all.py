@@ -28,8 +28,8 @@ logging.basicConfig(level=logging.INFO,
 #######################
 ## Read in data from files
 files=glob.glob('../data/weather_data/2016_*json')
-files=glob.glob('../data/weather_data/2016_2_1[456789]_*json')
-files+=glob.glob('../data/weather_data/2016_2_20_*json')
+files=glob.glob('../data/weather_data/2016_2_19_1_*json')
+#files+=glob.glob('../data/weather_data/2016_2_19_1_*json')
 logging.info('Found %d files to process' % len(files))
 
 files=[f for f in files if not re.search(r'_processed.json',f)]
@@ -37,7 +37,14 @@ logging.info('Found %d new files to process' % len(files))
 
 brazilIndices=np.loadtxt('../data/weather_data/brazil_indices.txt')
 
-dataGen=utils.jsonGenerator(files,verbose=True)
+if not importStations:
+    stationOffsets=utils.getStationOffsets(stationCollection)
+    logging.info('Pulling station info from DB')
+else:
+    logging.warning('Not pulling station info: not applying time zone offset')
+    stationOffsets=None
+
+dataGen=utils.jsonGenerator(files,verbose=True,offsets=stationOffsets)
 
 try:
     dfAll=pd.concat([d for d in dataGen])
@@ -46,18 +53,22 @@ except:
     sys.exit(1)
 
 ############################
-## Take unique tower information and put in collection
+# Get time zone offsets of towers
 dfUnique=dfAll.drop_duplicates()
 dfStation=pd.DataFrame(data={'lat':dfUnique['lat'],'long':dfUnique['long'],'id':dfUnique['id']})
 dfStation=dfStation.drop_duplicates()
 dfStation.set_index(dfStation['id'],inplace=True)
-# Mark which towers are in Brazil
-dfStation=dfStation.set_value(brazilIndices,'inBrazil',True)
 
-res=utils.putDfInMongo(dfStation,stationCollection)
-print 'Imported %d weather stations' % res
-print '%d weather stations in Brazil' % dfStation[dfStation['inBrazil']==True].shape[0]
+if importStations:
+############################
+## Only run if stations need to be reimported
+## Take unique tower information and put in collection
+    # Mark which towers are in Brazil
+    dfStation=dfStation.set_value(brazilIndices,'inBrazil',True)
 
+    res=utils.putDfInMongo(dfStation,stationCollection)
+    print 'Imported %d weather stations' % res
+    print '%d weather stations in Brazil' % dfStation[dfStation['inBrazil']==True].shape[0]
 ############################
 ## Import measurements
 del dfAll
@@ -65,6 +76,9 @@ del dfAll
 del dfUnique['lat']
 del dfUnique['long']
 # Don't need these to be stored for each measurements
+
+#dfUnique['sensorTime']=dfUnique['sensorTime']+pd.DateOffset(seconds=dfUnique['id'].map(stationOffsets)
+# Apply time zone offsets
 
 res=utils.putDfInMongo(dfUnique,db.clean)
 print 'Added %d measurements' % res
@@ -92,11 +106,15 @@ for group in groups:
     # If any values are null after resampling (if measurements dropped out)
     # remove rows
     resampledGroup['sensorTime']=resampledGroup.index
+#    resampledGroup['sensorTime']+=stationOffset[group[0]]
+    if not group[0] in stationOffsets.keys():
+        logging.warning('Missing offset for station %d' % group[0])
+
     resampledGroup['count']=group[1].resample(freq,how='count',label='left')['id']
     # Store how manyindividual measurements went into downsample
-    print group[0],
+    #print group[0],
     res=utils.putDfInMongo(resampledGroup,db.cleanDaily,bulk=True)
-    print res
+    #print res
     assert res==resampledGroup.shape[0], 'Error importing station %d: %d (%d,%d)' % (group[0],len(res.inserted_ids),resampledGroup.shape[0],resampledGroup.shape[1])
 
     nGroups+=1
