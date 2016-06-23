@@ -166,39 +166,32 @@ def jsonGenerator(files,verbose=False,offsets=None):
     station IDs to time zone offsets
     '''
     for f in files:
-	
-	with open(f,'r') as inFile:
-	    try:
-	    	d=json.loads(inFile.read())
-
-		temperature=map(lambda x:x['main']['temp'],d['list'])
-            	ids=map(lambda x:x['id'],d['list'])
-            	pressure=map(lambda x:x['main']['pressure'],d['list'])
-            	humidity=map(lambda x:x['main']['humidity'],d['list'])
-            	sensorTimes=map(lambda x:pd.datetime.fromtimestamp(x['dt']),d['list'])
-            	lats=map(lambda x:float(x['coord']['lat']),d['list'])
-            	longs=map(lambda x:float(x['coord']['lon']),d['list'])
+        with open(f,'r') as inFile:
+            try:
+                d=json.loads(inFile.read())
+                temperature=map(lambda x:x['main']['temp'],d['list'])
+                ids=map(lambda x:x['id'],d['list'])
+                pressure=map(lambda x:x['main']['pressure'],d['list'])
+                humidity=map(lambda x:x['main']['humidity'],d['list'])
+                sensorTimes=map(lambda x:pd.datetime.fromtimestamp(x['dt']),d['list'])
+                lats=map(lambda x:float(x['coord']['lat']),d['list'])
+                longs=map(lambda x:float(x['coord']['lon']),d['list'])
 
                 if offsets:
                     sensorTimes=[t+pd.DateOffset(seconds=offsets[i]) for t,i in zip(sensorTimes,ids)]
 
-            	assert len(temperature)==len(ids)==len(pressure)==len(humidity)==len(lats)==len(longs),\
-			'Data unequal (%d,%d,%d,%d,%d)' % (len(temperature),len(ids),len(pressure),len(humidity),len(lats),len(longs))
+                assert len(temperature)==len(ids)==len(pressure)==len(humidity)==len(lats)==len(longs),\
+			          'Data unequal (%d,%d,%d,%d,%d)' % (len(temperature),len(ids),len(pressure),len(humidity),len(lats),len(longs))
             	
-		df=pd.DataFrame(data={'temperature':temperature,'id':ids,'humidity':humidity,'pressure':pressure,\
+                df=pd.DataFrame(data={'temperature':temperature,'id':ids,'humidity':humidity,'pressure':pressure,\
                         'sensorTime':sensorTimes,'lat':lats,'long':longs},index=sensorTimes)
-        
-
-	    except:
-		if verbose:
-		    print 'Error reading %s' % f
-		    print traceback.print_exc()
-                
-                logging.warning('Error reading %s' % f)
-		df=pd.DataFrame()
-	    
-   	            
-            yield df
+                yield df
+                # Only yield if dataframe populated successfully
+            except:
+                if verbose:
+                    print 'Error reading %s' % f
+                    print traceback.print_exc()
+                logging.warning('File empty')
     	
 
 def getWeekday(d):

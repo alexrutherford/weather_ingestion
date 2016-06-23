@@ -28,7 +28,7 @@ logging.basicConfig(level=logging.INFO,
 #######################
 ## Read in data from files
 files=glob.glob('../data/weather_data/2016_*json')
-files=glob.glob('../data/weather_data/2016_2_19_1_*json')
+files=glob.glob('../data/weather_data/2016_5_18*json')
 #files+=glob.glob('../data/weather_data/2016_2_19_1_*json')
 logging.info('Found %d files to process' % len(files))
 
@@ -65,7 +65,6 @@ if importStations:
 ## Take unique tower information and put in collection
     # Mark which towers are in Brazil
     dfStation=dfStation.set_value(brazilIndices,'inBrazil',True)
-
     res=utils.putDfInMongo(dfStation,stationCollection)
     print 'Imported %d weather stations' % res
     print '%d weather stations in Brazil' % dfStation[dfStation['inBrazil']==True].shape[0]
@@ -91,7 +90,7 @@ print 'Added %d measurements' % res
 ###########################
 ## Retrieve some measurements in a given time range
 start=timeit.timeit()
-cur=utils.getMeasurementsInRange(db.clean,pd.datetime(2016,1,1),pd.datetime(2016,3,31))
+cur=utils.getMeasurementsInRange(db.clean,pd.datetime(2016,1,1),pd.datetime(2016,4,31))
 end=timeit.timeit()
 print 'Got %d rows in selected time period. Took %d' % (cur.count(),end-start)
 ###########################
